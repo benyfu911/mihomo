@@ -213,6 +213,16 @@ func SetFindProcessMode(mode P.FindProcessMode) {
 	findProcessMode = mode
 }
 
+func GetRules(metadata *C.Metadata) []C.Rule {
+	if sr, ok := subRules[metadata.SpecialRules]; ok {
+		log.Debugln("[Rule] use %s rules", metadata.SpecialRules)
+		return sr
+	} else {
+		log.Debugln("[Rule] use default rules")
+		return rules
+	}
+}
+
 func isHandle(t C.Type) bool {
 	status := status.Load()
 	return status == Running || (status == Inner && t == C.INNER)
@@ -605,7 +615,7 @@ func match(metadata *C.Metadata) (C.Proxy, C.Rule, error) {
 		resolved = true
 	}
 
-	for _, rule := range getRules(metadata) {
+	for _, rule := range GetRules(metadata) {
 		if !resolved && shouldResolveIP(rule, metadata) {
 			func() {
 				ctx, cancel := context.WithTimeout(context.Background(), resolver.DefaultDNSTimeout)
@@ -673,16 +683,6 @@ func match(metadata *C.Metadata) (C.Proxy, C.Rule, error) {
 	}
 
 	return proxies["DIRECT"], nil, nil
-}
-
-func getRules(metadata *C.Metadata) []C.Rule {
-	if sr, ok := subRules[metadata.SpecialRules]; ok {
-		log.Debugln("[Rule] use %s rules", metadata.SpecialRules)
-		return sr
-	} else {
-		log.Debugln("[Rule] use default rules")
-		return rules
-	}
 }
 
 func shouldStopRetry(err error) bool {
