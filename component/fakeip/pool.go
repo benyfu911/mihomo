@@ -9,6 +9,9 @@ import (
 	"github.com/metacubex/mihomo/common/nnip"
 	"github.com/metacubex/mihomo/component/profile/cachefile"
 	"github.com/metacubex/mihomo/component/trie"
+	C "github.com/metacubex/mihomo/constant"
+	"github.com/metacubex/mihomo/log"
+	"github.com/metacubex/mihomo/tunnel"
 )
 
 const (
@@ -36,6 +39,7 @@ type Pool struct {
 	cycle   bool
 	mux     sync.Mutex
 	host    *trie.DomainTrie[struct{}]
+	proxies []string
 	ipnet   netip.Prefix
 	store   store
 }
@@ -66,10 +70,36 @@ func (p *Pool) LookBack(ip netip.Addr) (string, bool) {
 
 // ShouldSkipped return if domain should be skipped
 func (p *Pool) ShouldSkipped(domain string) bool {
-	if p.host == nil {
-		return false
+
+	if p.host != nil && p.host.Search(domain) != nil {
+		return true
 	}
-	return p.host.Search(domain) != nil
+
+	metadata := C.Metadata{Host: domain}
+	proxies := tunnel.Proxies()
+
+	for _, rule := range tunnel.GetRules(&metadata) {
+		if matched, ada := rule.Match(&metadata); matched {
+			adapter, ok := proxies[ada]
+
+			if !ok {
+				continue
+			}
+
+			for adap := adapter; adap != nil; adap = adap.Unwrap(&metadata, false) {
+				if adap.Type() == C.Pass {
+					break
+				}
+
+				if adap.Name() == "DIRECT" {
+					log.Debugln("%s matched direct fakeip", domain)
+					return true
+				}
+			}
+		}
+	}
+
+	return false
 }
 
 // Exist returns if given ip exists in fake-ip pool
